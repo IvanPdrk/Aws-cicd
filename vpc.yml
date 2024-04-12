@@ -1,0 +1,26 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: VPC for codepipeline
+WebServerRoleName:
+  Type: String
+  Description: The name of the VPC where EC2 will be attached with the web server instance
+  Default: WebServerRole
+Resources:
+  myVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/24
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      Tags:
+       - Key: stack
+         Value: Test
+  mySubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: myVPC
+      CidrBlock: 10.0.0.0/28
+      AvailabilityZone: "us-east-1a"
+      Tags:
+      - Key: stack
+        Value: production
