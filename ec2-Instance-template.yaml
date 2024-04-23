@@ -5,34 +5,40 @@ Parameters:
   WebServerImage:
     Type: AWS::EC2::Image::Id
     Description: Custom AMI ID for the web server instance
+    Default: "ami-080e1f13689e07408"
   WebServerRoleName:
     Type: String
     Description: The name of the IAM Role attached to the web server instance
     Default: WebServerRole
 
 Resources:
-  WebServerInstance:
-    Type: AWS::EC2::Instance
+  myVPC:
+    Type: AWS::EC2::VPC
     Properties:
-      ImageId: !Ref WebServerImage
-      InstanceType: t2.micro
-      IamInstanceProfile: !Ref InstanceProfile
-      SecurityGroupIds:
-        - !Ref WebServerSecurityGroup
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
       Tags:
-        -
-          Key: Name
-          Value: !Sub "${AWS::StackName}-WebServer"
-        - 
-          Key: Environment
-          Value: Staging
+       - Key: stack
+         Value: !Sub "${AWS::StackName}-VPC"
+
+  mySubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: myVPC
+      CidrBlock: 10.0.0.0/24
+      AvailabilityZone: "us-east-1a"
+      Tags:
+      - Key: !Sub "${AWS::StackName}-Subnet"
+        Value: production
 
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties: 
       Roles: 
         - !Ref WebServerRoleName
-
+      
   WebServerSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -43,6 +49,22 @@ Resources:
           FromPort: 80
           ToPort: 80
           CidrIp: "0.0.0.0/0"
+
+  WebServerInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref WebServerImage
+      InstanceType: t2.micro
+      IamInstanceProfile: !Ref InstanceProfile
+      #SecurityGroupIds: Fn::ToJsonString: !GetAtt WebServerSecurityGroup.GroupId
+      SubnetId: !Ref mySubnet
+      Tags:
+        -
+          Key: Name
+          Value: !Sub "${AWS::StackName}-WebServer"
+        - 
+          Key: Environment
+          Value: Staging
 
 Outputs:
   WebServerDnsName:
