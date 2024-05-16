@@ -5,37 +5,80 @@ Parameters:
   WebServerImage:
     Type: AWS::EC2::Image::Id
     Description: Custom AMI ID for the web server instance
+    Default: "ami-080e1f13689e07408"
   WebServerRoleName:
     Type: String
     Description: The name of the IAM Role attached to the web server instance
     Default: WebServerRole
 
 Resources:
-  WebServerInstance:
-    Type: AWS::EC2::Instance
+  myVPC:
+    Type: AWS::EC2::VPC
     Properties:
-      ImageId: !Ref WebServerImage
-      InstanceType: t2.micro
-      IamInstanceProfile: !Ref InstanceProfile
-      SecurityGroupIds:
-        - !Ref WebServerSecurityGroup
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
       Tags:
-        -
-          Key: Name
-          Value: !Sub "${AWS::StackName}-WebServer"
-        - 
-          Key: Environment
-          Value: Staging
+       - Key: stack
+         Value: !Sub "${AWS::StackName}-VPC"
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-InternetGateway"
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref myVPC
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref myVPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-PublicRouteTable"
+
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  mySubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: myVPC
+      CidrBlock: 10.0.0.0/24
+      AvailabilityZone: "us-east-1a"
+      MapPublicIpOnLaunch: 'true'
+      Tags:
+      - Key: !Sub "${AWS::StackName}-Subnet"
+        Value: production
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref mySubnet
 
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties: 
       Roles: 
         - !Ref WebServerRoleName
-
+      
   WebServerSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
+      VpcId: !Ref myVPC
       GroupDescription: Security group for web servers 
       SecurityGroupIngress: 
         - 
@@ -43,6 +86,34 @@ Resources:
           FromPort: 80
           ToPort: 80
           CidrIp: "0.0.0.0/0"
+        - 
+          IpProtocol: "tcp"
+          FromPort: 443
+          ToPort: 443
+          CidrIp: "0.0.0.0/0"
+
+  WebServerInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref WebServerImage
+      InstanceType: t2.micro
+      IamInstanceProfile: !Ref InstanceProfile
+      SecurityGroupIds:
+        - !GetAtt "WebServerSecurityGroup.GroupId"
+      SubnetId: !Ref mySubnet
+      UserData:
+        Fn::Base64:
+          !Sub | 
+            #!/bin/bash
+            apt update -y
+            apt install nginx -y
+      Tags:
+        -
+          Key: Name
+          Value: !Sub "${AWS::StackName}-WebServer"
+        - 
+          Key: Environment
+          Value: Staging
 
 Outputs:
   WebServerDnsName:
