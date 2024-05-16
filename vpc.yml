@@ -1,26 +1,61 @@
-AWSTemplateFormatVersion: "2010-09-09"
-Description: VPC for codepipeline
-WebServerRoleName:
-  Type: String
-  Description: The name of the VPC where EC2 will be attached with the web server instance
-  Default: WebServerRole
+AWSTemplateFormatVersion: 2010-09-09
+Description: Template for AWS CodePipeline
+
+Parameters:
+  WebServerImage:
+    Type: AWS::EC2::Image::Id
+    Description: Custom AMI ID for the web server instance
+    Default: ami-023e152801ee4846a
+  WebServerRoleName:
+    Type: String
+    Description: The name of the IAM Role attached to the web server instance
+    Default: WebServerRole
+
 Resources:
-  myVPC:
-    Type: AWS::EC2::VPC
+  WebServerInstance:
+    Type: AWS::EC2::Instance
     Properties:
-      CidrBlock: 10.0.0.0/24
-      EnableDnsSupport: 'true'
-      EnableDnsHostnames: 'true'
+      ImageId: !Ref WebServerImage
+      InstanceType: t2.micro
+      IamInstanceProfile: !Ref InstanceProfile
+      SecurityGroupIds:
+        - !Ref WebServerSecurityGroup
       Tags:
-       - Key: stack
-         Value: Test
-  mySubnet:
-    Type: AWS::EC2::Subnet
+        -
+          Key: Name
+          Value: !Sub "${AWS::StackName}-WebServer"
+        - 
+          Key: Environment
+          Value: Staging
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          yum update -y
+          yum install -y httpd
+          systemctl start httpd
+          systemctl enable httpd
+          cd /var/www/html
+          # wget https://raw.githubusercontent.com/username/repository/branch/index.html  # Replace with the actual URL
+          # wget https://raw.githubusercontent.com/username/repository/branch/style.css   # Additional resources if needed
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties: 
+      Roles: 
+        - !Ref WebServerRoleName
+
+  WebServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
     Properties:
-      VpcId:
-        Ref: myVPC
-      CidrBlock: 10.0.0.0/28
-      AvailabilityZone: "us-east-1a"
-      Tags:
-      - Key: stack
-        Value: production
+      GroupDescription: Security group for web servers 
+      SecurityGroupIngress: 
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: "0.0.0.0/0"
+
+Outputs:
+  WebServerDnsName:
+    # Value: !GetAtt WebServerInstance.PublicDnsName
+    Description: Public DNS name of the web server instance
+    Value: !Sub "http://${WebServerInstance.PublicDnsName}"
